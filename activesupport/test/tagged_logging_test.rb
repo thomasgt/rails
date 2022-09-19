@@ -227,6 +227,34 @@ class TaggedLoggingWithoutBlockTest < ActiveSupport::TestCase
     assert_equal "[OMG] Broadcasting...\n", broadcast_output.string
   end
 
+  test "tags do not leak across loggers" do
+    sink1 = StringIO.new
+    sink2 = StringIO.new
+
+    tagged_logger1 = ActiveSupport::TaggedLogging.new(ActiveSupport::Logger.new(sink1))
+    tagged_logger2 = ActiveSupport::TaggedLogging.new(ActiveSupport::Logger.new(sink2))
+    tagged_logger2.extend(ActiveSupport::Logger.broadcast(tagged_logger1))
+
+    final_logger = ActiveSupport::TaggedLogging.new(tagged_logger2).tagged("test")
+
+    tagged_logger1.info("foo") # should write "foo" to sink1
+    tagged_logger2.info("bar") # should write "bar" to sink1 (via broadcast) and "bar" to sink2
+    final_logger.info("baz")   # should write "baz" to sink1 (via broadcast) and "[test] baz" to sink2
+
+    sink1_lines = sink1.string.each_line.to_a
+    sink2_lines = sink2.string.each_line.to_a
+
+    assert_equal 3, sink1_lines.length
+    assert_equal 2, sink2_lines.length
+
+    assert_equal "foo\n", sink1_lines[0]
+    assert_equal "bar\n", sink1_lines[1]
+    assert_equal "baz\n", sink1_lines[2]
+
+    assert_equal "bar\n", sink2_lines[0]
+    assert_equal "[test] baz\n", sink2_lines[1]
+  end
+
   test "keeps formatter singleton class methods" do
     plain_output = StringIO.new
     plain_logger = Logger.new(plain_output)
