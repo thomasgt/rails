@@ -227,6 +227,26 @@ class TaggedLoggingWithoutBlockTest < ActiveSupport::TestCase
     assert_equal "[OMG] Broadcasting...\n", broadcast_output.string
   end
 
+  test "tags do not leak across loggers" do
+    broadcast_output = StringIO.new
+    binding.pry
+    broadcast_logger = ActiveSupport::TaggedLogging.new(Logger.new(broadcast_output))
+    binding.pry
+    @logger.extend(ActiveSupport::Logger.broadcast(broadcast_logger))
+    binding.pry
+
+    tagged_logger = @logger.tagged("OMG")
+
+    binding.pry
+
+    broadcast_logger.info("foo") # should write "foo" to broadcast_output
+    @logger.info("bar")          # should write "bar" to broadcast_output and @output
+    tagged_logger.info("baz")    # should write "[OMG] baz" to broadcast_output and @output
+
+    assert_equal "foo\nbar\n[OMG] baz\n", broadcast_output.string
+    assert_equal "bar\n[OMG] baz\n", @output.string
+  end
+
   test "keeps broadcasting functionality when passed a block" do
     broadcast_output = StringIO.new
     broadcast_logger = ActiveSupport::TaggedLogging.new(Logger.new(broadcast_output))
